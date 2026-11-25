@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../api_service.dart';
 import '../validators.dart';
 import 'reset_password_screen.dart';
 import 'sign_up_screen.dart';
@@ -15,6 +16,7 @@ class _SignInScreenState extends State<SignInScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -23,14 +25,32 @@ class _SignInScreenState extends State<SignInScreen> {
     super.dispose();
   }
 
-  void _submit() {
-    if (_formKey.currentState!.validate()) {
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    // Приховуємо екранну клавіатуру перед початком мережевого запиту
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    try {
+      await ApiService.login(email, password);
+
+      if (!mounted) return;
+
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Авторизація'),
           content: Text(
-            'Валідацію пройдено успішно.\nЛогін: ${_emailController.text.trim()}',
+            'Валідацію пройдено та дані успішно надіслано на RequestCatcher.\nЛогін: $email',
           ),
           actions: [
             TextButton(
@@ -40,6 +60,22 @@ class _SignInScreenState extends State<SignInScreen> {
           ],
         ),
       );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Помилка під час відправки запиту: $e'),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -59,8 +95,11 @@ class _SignInScreenState extends State<SignInScreen> {
                   Image.network(
                     'https://storage.googleapis.com/cms-storage-bucket/0dbfcc7a59cd1cf16282.png',
                     height: 80,
-                    errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.lock_outline, size: 72, color: Colors.indigo),
+                    errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.lock_outline,
+                      size: 72,
+                      color: Colors.indigo,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   Text(
@@ -72,6 +111,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   const SizedBox(height: 24),
                   TextFormField(
                     controller: _emailController,
+                    enabled: !_isLoading,
                     keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(
                       labelText: 'Логін (Email)',
@@ -82,6 +122,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _passwordController,
+                    enabled: !_isLoading,
                     obscureText: _obscurePassword,
                     decoration: InputDecoration(
                       labelText: 'Пароль',
@@ -92,7 +133,9 @@ class _SignInScreenState extends State<SignInScreen> {
                               ? Icons.visibility_off
                               : Icons.visibility,
                         ),
-                        onPressed: () {
+                        onPressed: _isLoading
+                            ? null
+                            : () {
                           setState(() {
                             _obscurePassword = !_obscurePassword;
                           });
@@ -103,12 +146,23 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
-                    onPressed: _submit,
-                    child: const Text('Увійти'),
+                    onPressed: _isLoading ? null : _submit,
+                    child: _isLoading
+                        ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2.5,
+                      ),
+                    )
+                        : const Text('Увійти'),
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton(
-                    onPressed: () {
+                    onPressed: _isLoading
+                        ? null
+                        : () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -120,11 +174,14 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                   const SizedBox(height: 8),
                   TextButton(
-                    onPressed: () {
+                    onPressed: _isLoading
+                        ? null
+                        : () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const ResetPasswordScreen(),
+                          builder: (context) =>
+                          const ResetPasswordScreen(),
                         ),
                       );
                     },
